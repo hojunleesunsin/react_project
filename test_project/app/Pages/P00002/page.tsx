@@ -5,6 +5,7 @@ import { useMemo, useState, useTransition } from "react";
 const items = Array.from({ length: 10000 }, (_, i) => `Item ${i + 1}`);
 
 export default function SearchList() {
+  const [input, setInput] = useState("");
   const [query, setQuery] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -15,14 +16,13 @@ export default function SearchList() {
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    startTransition(() => {
-      setQuery(value); // 무거운 렌더를 transition으로 처리
-    });
+    setInput(value); // 긴급 업데이트
+    startTransition(() => setQuery(value)); // 비긴급(무거운) 업데이트
   };
 
   return (
     <div>
-      <input onChange={onChange} placeholder="검색..." />
+      <input value={input} onChange={onChange} placeholder="검색..." />
       {isPending && <p>검색 중...</p>}
       <ul>{filtered.slice(0, 50).map((v) => <li key={v}>{v}</li>)}</ul>
     </div>
