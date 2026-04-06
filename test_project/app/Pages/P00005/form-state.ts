@@ -1,6 +1,7 @@
-export type ProfileFormState = {
-  success: boolean;
+export type SignupState = {
+  ok: boolean;
   message: string;
+  submitCount: number;
   fieldErrors: {
     name?: string;
     email?: string;
@@ -11,12 +12,14 @@ export type ProfileFormState = {
   };
 };
 
-export const initialProfileState: ProfileFormState = {
-  success: false,
+export const initialSignupState: SignupState = {
+  ok: false,
   message: "",
+  submitCount: 0,
   fieldErrors: {},
   values: {
     name: "",
     email: "",
   },
 };
+
