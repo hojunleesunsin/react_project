@@ -23,12 +23,22 @@ export default function Page() {
         </li>
         <li>
           <Link className="text-blue-600 hover:underline" href="/Pages/P00004">
-            P00004 - 대시보드(독립 로딩/테마/폰트)
+            P00004 - 서버 컴포넌트 + 서버 함수 + 서버 액션
           </Link>
         </li>
         <li>
           <Link className="text-blue-600 hover:underline" href="/Pages/P00005">
             P00005 - useActionState 폼 예제
+          </Link>
+        </li>
+        <li>
+          <Link className="text-blue-600 hover:underline" href="/Pages/P00006">
+            P00006 - useEffectEvent 예제
+          </Link>
+        </li>
+        <li>
+          <Link className="text-blue-600 hover:underline" href="/Pages/P00007">
+            P00007 - 클라이언트에서 서버 액션 직접 호출
           </Link>
         </li>
       </ul>

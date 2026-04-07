@@ -1,4 +1,4 @@
-import type { FilterValues, Row } from "./form-state";
+import type { FilterValues, Row } from "../form-state";
 
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
