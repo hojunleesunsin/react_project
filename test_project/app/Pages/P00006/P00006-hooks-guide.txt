@@ -1,0 +1,195 @@
+P00006 Hooks Line-by-Line Guide
+
+대상 파일:
+- page.tsx
+- actions.ts (서버 액션 파일, React 훅 없음)
+
+========================================
+1) page.tsx - 사용된 훅 개요
+========================================
+
+- useState: UI 상태(theme, count, logs, isSaving) 저장
+- useEffectEvent: effect 재구독 없이 최신 state를 읽는 effect 전용 이벤트 콜백
+- useEffect: interval 구독/해제를 한 번만 설정
+
+----------------------------------------
+[라인별 설명]
+----------------------------------------
+
+L3: import { useEffect, useEffectEvent, useState } from "react";
+- 이 페이지의 핵심 훅 3개를 import.
+
+L7: const [theme, setTheme] = useState<"light" | "dark">("light");
+- 테마 토글 상태.
+- 버튼 클릭 시 배경/텍스트 스타일 변경.
+
+L8: const [count, setCount] = useState(0);
+- 사용자가 증가시키는 카운터 상태.
+- 서버 액션에 함께 전달되는 최신 값.
+
+L9: const [logs, setLogs] = useState<string[]>([]);
+- 서버 액션 응답 로그 목록 상태.
+- 최근 로그가 위에 오도록 prepend.
+
+L10: const [isSaving, setIsSaving] = useState(false);
+- 서버 액션 진행 여부 상태.
+- 호출 중 "서버 액션 호출 중..." 표시.
+
+L14-L16: const onTick = useEffectEvent(async () => { ... });
+- useEffectEvent 핵심 구간.
+- 목적:
+  1) interval effect는 재등록하지 않고
+  2) 콜백 실행 시점의 최신 theme/count를 읽어
+  3) 공용 함수(saveSnapshot)를 통해 서버 액션(saveTickSnapshotAction)을 호출
+- 일반 콜백과 차이:
+  - useEffect 내부에서 stale closure 문제를 줄이는 데 유리.
+  - 의존성 배열에 theme/count를 넣어 interval을 매번 재구독하지 않아도 최신값 사용 가능.
+- 주의:
+  - useEffectEvent로 만든 함수(onTick)는 effect 내부에서만 호출해야 한다.
+  - 버튼 onClick 같은 일반 이벤트 핸들러에서 직접 호출하면 ESLint 규칙 위반이 발생할 수 있다.
+
+L12-L20(현재 코드 기준): const saveSnapshot = async (...) => { ... }
+- 공용 비동기 함수.
+- 서버 액션 호출/로그 갱신/isSaving 제어를 한곳에 모아 재사용.
+- interval(onTick)과 수동 버튼(onClick)이 모두 이 함수를 사용.
+
+L22-L27: useEffect(() => { setInterval(...); return clearInterval; }, []);
+- interval 구독을 1회만 설정.
+- 2초마다 onTick() 실행.
+- cleanup으로 clearInterval 수행.
+- 포인트:
+  - effect는 구독 생명주기만 담당.
+  - 내부에서 최신 상태를 읽는 일은 useEffectEvent 콜백이 담당.
+
+L39: onClick={() => setTheme(...)}
+- theme 상태 변경.
+- 다음 onTick 실행 시 변경된 theme가 서버 액션으로 전송됨.
+
+L44: onClick={() => setCount((v) => v + 1)}
+- count 상태 증가.
+- 다음 onTick 실행 시 최신 count가 전송됨.
+
+L49: onClick={() => void saveSnapshot("manual", theme, count)}
+- 수동 저장은 일반 이벤트 핸들러이므로 useEffectEvent 함수를 직접 호출하지 않는다.
+- 대신 공용 함수(saveSnapshot)를 직접 호출해 서버 액션을 실행한다.
+
+L56: 저장 상태/현재 값 표시
+- isSaving, theme, count를 화면에 보여 디버깅과 학습에 도움.
+
+L58-L64: logs 렌더
+- onTick 결과가 화면에 누적되어, 최신 상태 캡처 여부를 시각적으로 확인 가능.
+
+========================================
+2) actions.ts 참고
+========================================
+
+L10-L23: saveTickSnapshotAction(...)
+- 서버 전용 함수("use server").
+- theme/count 입력을 받아 서버에서 스냅샷 형태로 응답 생성.
+- React 훅은 사용하지 않음(서버 액션 파일이기 때문).
+
+========================================
+3) useEffectEvent를 언제 쓰나?
+========================================
+
+- interval, websocket, 이벤트 리스너처럼 "구독은 유지"하면서
+  콜백에서 최신 state/props를 읽어야 할 때.
+- effect 의존성 증가로 인한 재구독 비용/복잡도를 줄이고 싶을 때.
+- 특히 P00006처럼:
+  - 구독은 useEffect로 1회 설정
+  - 구독 콜백은 useEffectEvent로 최신값 처리
+  - 일반 이벤트(onClick)는 일반 함수(saveSnapshot) 호출
+  패턴이 규칙에도 맞고 실무에서도 안정적이다.
+
+========================================
+4) 코드 흐름 순서 (실행 타임라인)
+========================================
+
+[A. 최초 진입(마운트)]
+1. 컴포넌트 함수가 실행되고 state 초기화:
+   - theme="light", count=0, logs=[], isSaving=false
+2. onTick(useEffectEvent) 함수 참조가 준비됨.
+3. useEffect([])가 실행되어 setInterval이 1회 등록됨.
+4. 화면 첫 렌더 완료.
+
+[B. 5초 후 interval tick 발생]
+1. setInterval 콜백에서 onTick() 호출.
+2. onTick 내부에서 saveSnapshot("interval", theme, count) 호출.
+3. saveSnapshot 시작 시 setIsSaving(true) 실행 -> 리렌더 1회.
+4. saveTickSnapshotAction(...) 서버 액션 await.
+5. 응답 도착 후 setLogs(...) 실행 -> 리렌더 1회.
+6. setIsSaving(false) 실행 -> 리렌더 1회.
+7. 결과: 로그 1줄 추가, 저장 상태는 다시 "대기".
+
+[C. 사용자가 테마/카운트 변경]
+1. setTheme 또는 setCount 실행 -> 리렌더 발생.
+2. interval은 재등록되지 않음(useEffect 의존성 []).
+3. 다음 tick에서 onTick이 "최신 theme/count"를 읽어 저장.
+
+[D. 사용자가 "수동 저장" 클릭]
+1. onClick에서 saveSnapshot("manual", theme, count) 직접 호출.
+2. 내부 흐름은 B-3 ~ B-6과 동일:
+   - isSaving true -> 서버 액션 -> logs 갱신 -> isSaving false
+3. 로그에는 source가 manual로 기록됨.
+
+[E. 컴포넌트 이탈(언마운트)]
+1. useEffect cleanup 실행.
+2. clearInterval(timer) 호출로 타이머 정리.
+3. 더 이상 onTick 자동 호출 없음.
+
+[핵심 정리]
+- "무엇이 리렌더를 만들까?" -> setState 호출(setIsSaving, setLogs, setTheme, setCount)
+- "무엇이 최신값을 보장할까?" -> useEffectEvent(onTick)
+- "무엇이 구독 수명을 관리할까?" -> useEffect + cleanup
+
+========================================
+5) useEffect 내부 setState 주의사항
+========================================
+
+[문제될 수 있는 패턴]
+- effect 본문에서 조건 없이 동기 setState를 바로 호출하는 경우.
+- 예:
+  useEffect(() => {
+    setIsSaving(true);
+  }, [setIsSaving]);
+- 이런 코드는 effect 실행 -> setState -> 리렌더 -> effect 재평가 흐름을 만들어
+  경고(cascading render)나 로직 혼란을 유발할 수 있다.
+
+[상대적으로 안전한 패턴]
+- 외부 시스템 이벤트/콜백 안에서 setState를 수행:
+  - setInterval 콜백
+  - addEventListener 콜백
+  - 서버 응답 await 이후
+- 즉, "effect 본문 즉시 setState"가 아니라 "외부 이벤트 반응 setState"가 핵심.
+
+[실무 체크리스트]
+1) 이 상태가 진짜 state가 필요한가? (파생값이면 useMemo/렌더 계산으로 대체)
+2) effect 안에서 즉시 setState가 꼭 필요한가?
+3) 구독 로직과 상태 갱신 로직을 분리할 수 있는가?
+
+========================================
+6) useEffectEvent와 무한 렌더링 관계
+========================================
+
+- useEffectEvent는 "최신 state/props를 읽는 effect 전용 콜백"을 제공한다.
+- 하지만 useEffectEvent 자체가 무한 렌더링을 자동으로 막아주지는 않는다.
+- 무한 렌더링 여부는 결국 setState 호출 조건에 달려 있다.
+
+[정리]
+- useEffectEvent가 해결하는 것:
+  - stale closure 문제
+  - 불필요한 재구독(의존성 과다) 문제
+- useEffectEvent가 해결하지 않는 것:
+  - 잘못된 setState 루프 자체
+
+[예시]
+- 잘못된 코드:
+  useEffect(() => {
+    setX((v) => v + 1);
+  }, [x]);
+  -> 상태가 바뀔 때마다 effect가 다시 돌 수 있어 루프 위험.
+
+- 개선 방향:
+  - effect는 구독/정리만 담당
+  - 상태 갱신은 외부 이벤트 콜백(또는 명확한 조건 분기)에서만 수행
+

@@ -41,6 +41,16 @@ export default function Page() {
             P00007 - 클라이언트에서 서버 액션 직접 호출
           </Link>
         </li>
+        <li>
+          <Link className="text-blue-600 hover:underline" href="/Pages/P00008">
+            P00008 - page.tsx(클라) + actions.ts(서버 액션)
+          </Link>
+        </li>
+        <li>
+          <Link className="text-blue-600 hover:underline" href="/Pages/P00009">
+            P00009 - React 19 use() API 예제
+          </Link>
+        </li>
       </ul>
     </main>
   );

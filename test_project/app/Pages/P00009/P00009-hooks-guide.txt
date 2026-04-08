@@ -1,0 +1,128 @@
+P00009 Hooks Guide (통합 구조)
+
+대상 파일:
+- page.tsx (클라이언트 컴포넌트)
+- actions.ts (서버 액션 + 데이터 함수 통합)
+
+========================================
+1) 현재 구조 요약
+========================================
+
+이 페이지는 "혼합형 학습 구조"다.
+- 클라이언트 이벤트(버튼 클릭)로 서버 액션을 호출
+- 서버 액션이 반환한 Promise를 state에 저장
+- 하위 렌더 함수에서 React 19 use(promise)로 값 소비
+- Suspense fallback으로 로딩 UI 처리
+
+즉, P00006 방식(클라이언트 이벤트 기반)과
+P00009 방식(use + Suspense 렌더 소비)을 같이 체험하는 예제다.
+
+========================================
+2) page.tsx 라인별 핵심 훅 설명
+========================================
+
+L3: import { Suspense, use, useState } from "react";
+- useState: Promise 상태/요청 횟수 상태 관리
+- use: Promise 값을 렌더 중에 읽는 React 19 API
+- Suspense: use()가 pending일 때 fallback을 보여주는 경계
+
+L8-L10: type UserListProps, usersPromise: Promise<UserRow[]>
+- use()로 읽을 Promise 타입을 명확히 고정.
+
+L12: function UserList({ usersPromise }: UserListProps)
+- 기존 UserListClient.tsx를 page.tsx 내부 함수로 합친 형태.
+- 분리 파일 없이 같은 동작을 유지.
+
+L13: const users = use(usersPromise);
+- React 19 use() 핵심.
+- Promise가 pending이면 가장 가까운 Suspense로 제어권 이동.
+- resolve되면 users 배열을 받아 아래 목록 렌더.
+
+L26: const [usersPromise, setUsersPromise] = useState<Promise<UserRow[]> | null>(null);
+- "현재 화면이 소비할 Promise"를 상태로 관리.
+- 버튼 클릭 시 새 Promise를 넣으면 Suspense 흐름이 다시 동작.
+
+L27: const [requestedCount, setRequestedCount] = useState(0);
+- 요청 횟수 표시용 상태.
+- use()와 직접 관련은 없지만 이벤트-상태 흐름을 시각화하는 보조 상태.
+
+L29-L32: onLoadUsers()
+- setRequestedCount로 클릭 카운트 증가
+- setUsersPromise(loadUsersAction())로 서버 액션 Promise 저장
+- 포인트:
+  - 이벤트 핸들러에서는 use()를 호출하지 않는다.
+  - 이벤트에서는 Promise "생성/저장"만 하고,
+    실제 값 소비는 렌더 단계(UserList)에서 use()로 처리.
+
+L47-L53: {usersPromise ? <Suspense> ... : ...}
+- usersPromise가 없으면 안내 문구 표시.
+- usersPromise가 있으면 Suspense 경계 안에서 UserList 렌더.
+- pending 동안 fallback("사용자 목록 로딩 중...") 표시.
+
+========================================
+3) actions.ts 역할 (통합 후)
+========================================
+
+L1: "use server"
+- 서버 액션 파일임을 명시.
+
+L3-L7: UserRow 타입
+- 기존 data.ts에 있던 타입을 actions.ts로 이동.
+
+L9-L18: getUsers()
+- 기존 data.ts의 데이터 생성 함수.
+- 서버 지연(setTimeout) 포함.
+
+L20-L22: loadUsersAction()
+- 클라이언트에서 직접 호출하는 서버 액션.
+- Promise<UserRow[]> 반환.
+
+정리:
+- data.ts를 actions.ts에 통합했기 때문에 P00009는 파일 수를 줄이면서도
+  서버 경계(서버 액션)는 유지한다.
+
+========================================
+4) 실행 순서(타임라인)
+========================================
+
+1. 최초 진입
+- usersPromise=null, requestedCount=0
+- "버튼을 눌러..." 문구만 보임
+
+2. 버튼 클릭
+- onLoadUsers 실행
+- requestedCount +1
+- usersPromise에 loadUsersAction() Promise 저장
+- 상태 변경으로 리렌더 발생
+
+3. 렌더 중 use(promise) 진입
+- UserList 내부 use(usersPromise) 실행
+- Promise pending이면 Suspense fallback 노출
+
+4. 서버 액션 완료
+- Promise resolve
+- UserList가 users 데이터를 받아 목록 렌더
+
+5. 다시 버튼 클릭
+- 새 Promise가 state에 들어감
+- 다시 fallback -> 완료 후 목록 갱신
+
+========================================
+5) 자주 헷갈리는 포인트
+========================================
+
+Q1) use()를 onClick 안에서 호출하면?
+- 안 된다. use()는 렌더 중 호출하는 API다.
+- onClick에서는 Promise를 만들고 state에 저장만 한다.
+
+Q2) 이 구조가 P00006과 같은가?
+- 완전히 같지는 않다.
+- 공통점: 클라이언트 이벤트로 서버 액션 시작
+- 차이점:
+  - P00006: await 결과를 setState로 직접 반영
+  - P00009: Promise를 state로 들고, use()+Suspense가 렌더를 제어
+
+Q3) use()를 쓰면 무조건 좋은가?
+- 아니고, 목적이 맞을 때 좋다.
+- "Promise 소비를 Suspense와 자연스럽게 연결"하고 싶을 때 특히 유리.
+
