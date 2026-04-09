@@ -96,3 +96,31 @@ P00003 Hooks Guide (클라이언트에서 서버 액션 직접 호출 구조)
 - 역할은 데이터 생성/조회/검증 같은 서버 로직 처리.
 - 훅은 page.tsx(클라이언트 컴포넌트)에서 UI 상태/렌더 제어에 사용.
 
+
+----------------------------------------
+use(promise) + Suspense 내부 실행 순서]
+----------------------------------------
+
+대상 시나리오:
+- 클라이언트 컴포넌트에서 버튼 클릭 후 서버 액션 Promise 생성
+- 하위 컴포넌트에서 use(promise)로 결과를 읽음
+- 상위에서 Suspense fallback으로 로딩 UI 제공
+
+핵심 원리:
+- use(promise)는 Promise가 아직 resolve되지 않았으면 현재 렌더를 "대기(suspend)" 상태로 만든다.
+- Suspense는 이 대기 상태를 감지해 fallback UI를 먼저 렌더링한다.
+- Promise가 resolve되면 해당 컴포넌트를 다시 렌더링해 실제 데이터를 보여준다.
+
+실행 순서(단계별):
+1. 초기 렌더: promise가 없으면 안내 문구만 표시
+2. 버튼 클릭: 서버 액션 호출 -> Promise 생성 -> state에 저장
+3. 재렌더: 하위 컴포넌트가 use(promise) 실행
+4. Promise 미완료: 컴포넌트가 suspend됨
+5. Suspense 경계가 fallback("로딩 중...")을 화면에 표시
+6. Promise resolve: React가 해당 경계를 다시 렌더
+7. use(promise)가 실제 값(User[]) 반환
+8. 목록 UI 렌더 완료
+
+오류 흐름:
+- Promise reject 시에는 Suspense fallback이 아니라 Error Boundary(error.tsx) 경로로 전달된다.
+- 정리하면 Suspense는 "로딩 대기", error.tsx는 "실패 처리" 담당이다.

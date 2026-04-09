@@ -36,6 +36,9 @@ export default function Page() {
       <p className="mb-4 mt-2 text-sm text-slate-600">
         버튼 클릭으로 서버 액션 Promise를 만들고, 하위 컴포넌트에서 <code>use(promise)</code>로 값을 읽습니다.
       </p>
+      <p className="mb-4 text-xs text-slate-500">
+        에러 전파 테스트: <code>actions.ts</code>의 테스트용 <code>throw</code> 주석을 해제하고 버튼을 눌러보세요.
+      </p>
 
       <div className="mb-4 flex items-center gap-3">
         <button
