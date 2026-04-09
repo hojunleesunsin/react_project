@@ -80,3 +80,70 @@ P00008 Hooks Line-by-Line Guide
   - 주로 form action 패턴과 함께 서버 액션 결과 상태를 자동 관리할 때 적합.
   - 현재 P00008은 "클라이언트에서 직접 await 호출" 패턴이므로 useActionState를 쓰지 않음.
 
+----------------------------------------
+[추가 설명 1: useTransition 내부 동작 원리]
+----------------------------------------
+
+핵심: useTransition은 "비동기 실행 도구"가 아니라 "렌더링 우선순위 제어 도구"다.
+
+1) 기본 구조
+- const [isPending, startTransition] = useTransition();
+- startTransition(() => { setState(...) }) 안의 업데이트는 비긴급(낮은 우선순위)으로 분류된다.
+
+2) React 내부 처리(개념)
+- 이벤트 발생 -> setState 예약
+- 일반 setState는 긴급 업데이트로 먼저 처리될 수 있다.
+- startTransition 내부 setState는 나중에 처리 가능한 작업으로 분류된다.
+- 렌더 도중 더 긴급한 업데이트(입력 타이핑 등)가 오면 transition 렌더는 중단/양보될 수 있다.
+- 긴급 업데이트를 먼저 커밋한 뒤 transition 업데이트를 이어서 처리한다.
+
+3) isPending의 의미
+- startTransition으로 예약된 작업이 "아직 화면 반영 중"이면 true.
+- 반영이 끝나면 false.
+- 보통 버튼 disabled, "처리 중..." 텍스트, 중복 제출 방지에 사용한다.
+
+4) 자주 헷갈리는 포인트
+- startTransition은 Promise를 기다리지 않는다(반환 타입이 void).
+- startTransition(...).catch(...)는 불가하다.
+- 네트워크를 빠르게 하지는 않는다. 네트워크 이후의 렌더 우선순위를 조정한다.
+- 중복 요청을 자동 방지하지 않는다(연타 방지는 별도 처리 필요).
+
+5) 실무 주의사항
+- 완료 순서가 호출 순서와 다를 수 있어 오래된 응답이 최신 상태를 덮어쓸 수 있다.
+- 필요하면 isPending으로 입력/버튼 제어, 요청 ID 비교, 취소/무시 로직을 추가한다.
+
+----------------------------------------
+[추가 설명 2: useActionState 내부 동작 원리]
+----------------------------------------
+
+핵심: useActionState는 "폼 제출 + 서버 액션 결과 상태"를 묶어서 관리하는 훅이다.
+
+1) 기본 구조
+- const [state, formAction, isPending] = useActionState(actionFn, initialState);
+- state: 서버 액션의 최신 반환값
+- formAction: form action에 연결할 dispatch 함수
+- isPending: 해당 action 실행 중 여부
+
+2) 서버 액션 시그니처
+- actionFn(prevState, formData)
+- prevState는 개발자가 직접 넘기지 않아도 React가 내부 state에서 자동 주입한다.
+- formData는 폼 제출 시 브라우저가 구성해 전달한다.
+
+3) 제출 시 내부 흐름
+1. 사용자가 <form> 제출
+2. 브라우저가 FormData 생성
+3. formAction 호출
+4. React가 현재 state를 prevState로 넣어 actionFn(prevState, formData) 실행
+5. 서버 액션이 객체(다음 상태) 반환
+6. 반환 객체 전체가 새로운 state가 됨
+7. 컴포넌트 리렌더
+8. 실행 중 isPending=true, 완료 후 false
+
+4) 왜 ...prevState를 자주 쓰는가
+- 반환 객체가 "다음 state 전체"가 되기 때문이다.
+- 따라서 일부 필드만 바꾸려면 ...prevState로 기존 필드를 보존하고 필요한 값만 덮어쓴다.
+- ...prevState를 생략하면 명시하지 않은 필드가 다음 state에서 사라질 수 있다.
+
+5) 언제 적합한가
+- <form action={...}> 기반 서버 액션 패턴에서 가장 적합하다.
+- onClick에서 await myAction() 직접 호출 패턴은 보통 useTransition/useState 조합이 더 자연스럽다.

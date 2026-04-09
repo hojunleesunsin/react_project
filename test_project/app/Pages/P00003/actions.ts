@@ -17,7 +17,7 @@ export async function loadSearchRowsAction(keyword: string): Promise<SearchRow[]
       id: i + 1,
       label: `Item ${i + 1} - ${group}`,
       group,
-    } satisfies SearchRow;
+    } as SearchRow;
   });
 
   if (!normalized) return rows;

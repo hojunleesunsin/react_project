@@ -9,7 +9,12 @@ export default function SearchList() {
   const [useDeferred, setUseDeferred] = useState(true);
   const [rows, setRows] = useState<SearchRow[]>([]);
   const [message, setMessage] = useState("조회 버튼을 누르면 서버 액션으로 데이터를 불러옵니다.");
+  const [fatalError, setFatalError] = useState<Error | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  if (fatalError) {
+    throw fatalError;
+  }
 
   // useDeferredValue: 입력값은 즉시 반영하고, 무거운 필터 계산은 한 템포 늦춰 처리한다.
   const deferredFilter = useDeferredValue(clientFilter);
@@ -23,12 +28,22 @@ export default function SearchList() {
   }, [rows, activeFilter]);
 
   const onSearch = () => {
-    startTransition(async () => {
-      setMessage("서버 액션 호출 중...");
-      const start = Date.now();
-      const data = await loadSearchRowsAction(serverKeyword);
-      setRows(data);
-      setMessage(`서버 액션 완료: ${data.length.toLocaleString()}건 (${Date.now() - start}ms)`);
+    startTransition(() => {
+      void (async () => {
+        setMessage("서버 액션 호출 중...");
+        const start = Date.now();
+        const data = await loadSearchRowsAction(serverKeyword).catch((error: unknown) => {
+          throw error instanceof Error
+            ? error
+            : new Error("서버 액션 처리 중 알 수 없는 오류가 발생했습니다.");
+        });
+        setRows(data);
+        setMessage(`서버 액션 완료: ${data.length.toLocaleString()}건 (${Date.now() - start}ms)`);
+      })().catch((error: unknown) => {
+        setFatalError(
+          error instanceof Error ? error : new Error("조회 처리 중 알 수 없는 오류가 발생했습니다."),
+        );
+      });
     });
   };
 
