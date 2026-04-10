@@ -1,5 +1,6 @@
 import type { FilterValues } from "../../form-state";
 import { applyFiltersAction } from "../../actions/dashboard-actions";
+import { Select } from "@/components/common/Select";
 
 export function FilterForm({ filters }: { filters: FilterValues }) {
   return (
@@ -11,26 +12,26 @@ export function FilterForm({ filters }: { filters: FilterValues }) {
 
       <form action={applyFiltersAction} className="grid gap-3">
         <label className="mb-1.5 block font-semibold">기간</label>
-        <select
+        <Select
           name="period"
           defaultValue={filters.period}
-          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-        >
-          <option value="7d">최근 7일</option>
-          <option value="30d">최근 30일</option>
-          <option value="90d">최근 90일</option>
-        </select>
+          options={[
+            { value: "7d", label: "최근 7일" },
+            { value: "30d", label: "최근 30일" },
+            { value: "90d", label: "최근 90일" },
+          ]}
+        />
 
         <label className="mb-1.5 block font-semibold">카테고리</label>
-        <select
+        <Select
           name="category"
           defaultValue={filters.category}
-          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-        >
-          <option value="all">전체</option>
-          <option value="A">A</option>
-          <option value="B">B</option>
-        </select>
+          options={[
+            { value: "all", label: "전체" },
+            { value: "A", label: "A" },
+            { value: "B", label: "B" },
+          ]}
+        />
 
         <button
           type="submit"
