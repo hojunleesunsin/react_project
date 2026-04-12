@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
+// import { useActionState, useState } from "react";
 import { signupAction } from "./actions";
 import { initialSignupState } from "./form-state";
 
@@ -22,18 +23,23 @@ export default function Page() {
   // useActionState:
   // [state, formAction]을 반환하고, formAction이 실행되면
   // 서버 액션의 반환값으로 state가 자동 갱신된다.
-  const [state, formAction] = useActionState(signupAction, initialSignupState);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // 세 번째 isPending: useFormStatus 없이 제출 중 여부 표시에 사용
+  const [state, formAction, isPending] = useActionState(signupAction, initialSignupState);
 
-  // react-dom의 useFormStatus 없이, 클라이언트 상태로 pending을 제어
-  async function handleSubmit(formData: FormData) {
-    setIsSubmitting(true);
-    try {
-      await formAction(formData);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+  // --- 기존: react-dom의 useFormStatus 없이 클라이언트 상태로 pending 제어 + 래퍼 핸들러 ---
+  // const [state, formAction] = useActionState(signupAction, initialSignupState);
+  // const [isSubmitting, setIsSubmitting] = useState(false);
+  //
+  // async function handleSubmit(formData: FormData) {
+  //   setIsSubmitting(true);
+  //   try {
+  //     await formAction(formData);
+  //   } finally {
+  //     setIsSubmitting(false);
+  //   }
+  // }
+  // <form action={handleSubmit} ...>
+  // <SubmitButton pending={isSubmitting} />
 
   return (
     <main className="mx-auto mt-10 max-w-xl rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -42,7 +48,7 @@ export default function Page() {
         폼 제출 - 서버 검증 - 상태 반영 흐름을 한 페이지에서 확인하는 예시입니다.
       </p>
 
-      <form action={handleSubmit} className="grid gap-4">
+      <form action={formAction} className="grid gap-4">
         <div className="grid gap-1">
           <label htmlFor="name" className="text-sm font-semibold">
             이름
@@ -76,7 +82,7 @@ export default function Page() {
           ) : null}
         </div>
 
-        <SubmitButton pending={isSubmitting} />
+        <SubmitButton pending={isPending} />
       </form>
 
       <div className="mt-6 rounded-md bg-slate-50 p-3 text-sm">
@@ -90,4 +96,3 @@ export default function Page() {
     </main>
   );
 }
-

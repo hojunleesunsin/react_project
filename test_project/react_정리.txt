@@ -1,0 +1,107 @@
+●use
+use(promise), use(context)
+랜더링 도중에 두가지를 읽을때 쓰는 API
+Promise => 값이 나올때까지 컴포넌트 트리를 suspend
+Context => useContext와 비슷하게 컨텍스트 값 읽기
+
+use(promise)를 실행했을때 아직 Promise가 끝나지않았으면 컴포넌트가 suspend되고 가장 가까운 부모 <Suspense> 를 찾고 속성 fallback을 보여준다. fallback으로 스켈레톤 UI나 로딩중 ... 등 대기중은 화면을 보여줄수있다.
+그후 Promise가 resolve가 되면 다시 랜더되면서 use가 값을 받음
+
+**Suspense가 아예 없으면 상위로 계속 전파되거나, 환경에 따라 에러/경고로 이어질 수 있어서, use를 쓰는 트리에는 반드시 Suspense를 두는 게 안전
+
+use(context)로 사용하는 경우는 useContext를 사용하는것과 동일하다.
+
+Suspense + use 방식
+
+
+●useActionState
+const [state, formAction, isPending] = useActionState(action, initalState);
+
+state
+액션이 성공적으로 반환한 상태값.
+액션 안에서 return { } 한 객체/값이 그대로 들어간다.
+
+formAction
+<form action={formAction}> 에 넘기는 바인딩된 액션 디스패처.
+폼이 제출되면 React가 FormData를 만들어서 action(previousState, formData)로 넘긴다.
+previousState: 이전 액션의 반환값이 prevState로 다시 들어온다, 없다면 initalState
+formData: 폼이 제출될때 인자로 넣어줌
+(환경에 따라) formAction을 직접 호출하면서 FormData를 넘기는 패턴도 존재.
+
+isPending
+현재 액션이 진행중인지 true, false 여부.
+
+action
+이전상태를 받아 다음상태를 돌려주는 액션 함수
+
+initalState
+초기상태
+
+useState와의 차이
+useState는 setState로 상태만 변경해주지만 useActionState는 폼 제출/서버 액션과 연동되고, previouseState를 액션에 넘겨 연속제출에(페이지네이션, 에러 누적 등)에 유리
+폼 + 서버 액션 + 상태 관리 이면 useActionState가 특히 잘 맞음.
+
+
+●useTransition
+const [isPending, startTransition] = useTransition();
+급하지 않은 상태 업데이트를 낮은 우선순위로 처리, UI가 먼저 반응해 보이게 하는 훅
+startTransition(() => {
+	setState();
+}): 
+이 안의 setState들을 “전환(transition)”으로 표시 → React가 렌더를 나누거나 더 급한 업데이트를 먼저 처리할 수 있음
+
+isPending의 경우에는 startTransition의 부분들이 모두 렌더/반영이 끝날때까지 true 상태이다가 끝나면 false로 변경
+
+
+- use + Suspense
+Promise가 끝날 때까지 렌더를 잠깐 멈추고, 로딩 UI(fallback) 를 보여줌
+비동기 결과(Promise) 를 렌더 안에서 읽을 때 씀.
+Promise가 안 끝났으면 suspend → 가까운 Suspense의 fallback.
+- useActionState
+폼 제출(서버 액션) 과 연결해서 이전 state → 다음 state 를 서버 결과로 갱신, isPending 으로 제출 중 표시
+<form action={...} + 서버 액션 흐름과 잘 맞음 (FormData, prevState).
+- useTransition
+같은 화면 안에서 어떤 setState는 급하게, 어떤 건 덜 급하게 그리도록 우선순위를 나눔
+이미 있는 state로 무거운 리렌더를 일으킬 때, 그걸 transition으로 묶어 입력 반응을 살리는 용도.
+
+예시 )
+조회는 use + Suspense 로 로딩 표시
+입력은 useTransition 으로 목록 갱신만 낮은 우선순위로
+가입 폼은 useActionState
+
+
+●useDeferredValue
+const [query, setQuery] = useState("");
+const deferredQuery = useDeferredValue(query);
+useDeferredValue(value)는 지금 값 value를 그대로 쓰는 대신, React가 한 박자 늦게 따라가는 값
+
+React가 스케줄러와 맞춰 원본보다 늦게 따라가게 처리한다.
+
+
+
+●useEffectEvent
+const changeState = useEffectEvent(() => {
+	state
+});
+
+useEffect(() => {
+	changeState();
+}, []);
+
+
+useLayoutEffect와 useEffect의 차이
+1. 렌더(Render)
+컴포넌트 함수가 다시 실행되고
+“다음 화면은 이렇게 보여야 해”라는 결과(React 내부의 트리, 가상 DOM에 해당하는 정보)를 계산.
+이 단계에서는 아직 진짜 HTML(DOM)이 바뀌었다고 보장할 수 없음
+2. 커밋(Commit)
+방금 계산한 결과를 실제 브라우저 DOM에 반영.
+즉, 화면에 연결된 진짜 요소들이 추가/삭제/속성 변경되는 작업이 일어나는 단계
+“렌더에서 정한 내용을 확정해서 적용한다”는 느낌의 커밋. (DB의 commit처럼)
+
+1. 랜더 - 어떻게 보일지 계산
+2. 커밋 - 실제 적용
+3. useLayoutEffect => 커밋이 끝난 직후에 실행
+4. 페인트 => 브라우저가 화면에 그림
+5. useEffect => 보통은 페인트 이후 실행됨
+

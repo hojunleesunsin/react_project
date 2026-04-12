@@ -12,6 +12,7 @@ const menuItems = [
   { href: "/Pages/P00009", title: "P00009", description: "React 19 use() API 예제" },
   { href: "/Pages/P00010", title: "P00010", description: "추가 실습 페이지" },
   { href: "/Pages/P00011", title: "P00011", description: "공용 Select + 공용 DataGrid 레이아웃" },
+  { href: "/Pages/P00012", title: "P00012", description: "props 동기화 패턴 (key / 렌더보정 / controlled)" },
 ];
 
 export default function Page() {
