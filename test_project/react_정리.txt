@@ -126,6 +126,17 @@ useDeferredValue(value)는 지금 값 value를 그대로 쓰는 대신, React가
 
 React가 스케줄러와 맞춰 원본보다 늦게 따라가게 처리한다.
 
+debounce
+- API 호출 횟수 크게 감소 (서버 부하 절감)
+- 타이핑 중 불필요한 요청/연산 방지
+- 동작이 직관적(300ms, 500ms 같은 명시적 제어)
+useDeferredValue
+- 입력 반응성 유지(타이핑/조작이 부드러움)
+- 무거운 리스트/차트 렌더링이 UI를 덜 막음
+- 고정 지연시간 없이 React가 상황에 맞게 처리
+
+useDeferredValue는 UI 버벅임 완화를 해주는 역할
+
 
 
 ●useEffectEvent
@@ -153,4 +164,5 @@ useLayoutEffect와 useEffect의 차이
 3. useLayoutEffect => 커밋이 끝난 직후에 실행
 4. 페인트 => 브라우저가 화면에 그림
 5. useEffect => 보통은 페인트 이후 실행됨
+
 
