@@ -14,6 +14,8 @@ const menuItems = [
   { href: "/Pages/P00011", title: "P00011", description: "공용 Select + 공용 DataGrid 레이아웃" },
   { href: "/Pages/P00012", title: "P00012", description: "props 동기화 패턴 (key / 렌더보정 / controlled)" },
   { href: "/Pages/P00013", title: "P00013", description: "debounce vs useDeferredValue 비교" },
+  { href: "/Pages/P00014", title: "P00014", description: "useDeferredValue + useTransition + memo 최적화" },
+  { href: "/Pages/P00015", title: "P00015", description: "useReducer 복합 상태/규칙 관리 예제" },
 ];
 
 export default function Page() {
