@@ -10,11 +10,15 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
     };
+    error?: "RefreshTokenExpired";
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
     loginId?: string;
+    accessTokenExpires?: number;
+    refreshTokenExpires?: number;
+    error?: "RefreshTokenExpired";
   }
 }

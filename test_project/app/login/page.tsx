@@ -1,11 +1,14 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isSessionExpired = searchParams.get("reason") === "session_expired";
+
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -40,6 +43,12 @@ export default function LoginPage() {
   return (
     <main className="mx-auto mt-16 w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <h1 className="mb-6 text-2xl font-bold">로그인</h1>
+
+      {isSessionExpired && (
+        <div className="mb-4 rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+          장시간 미사용으로 세션이 만료되었습니다. 다시 로그인해 주세요.
+        </div>
+      )}
 
       <form className="grid gap-4" onSubmit={onSubmit}>
         <label className="grid gap-1">

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useMemo, type ReactNode } from "react";
+import { Suspense, use, useMemo, createContext, useContext, type ReactNode } from "react";
 
 export type DataGridColumn<T> = {
   key: keyof T;
@@ -24,6 +24,19 @@ export type DataGridProps<T> = {
       rowsPromise: Promise<T[]>;
     }
 );
+
+// 1. DataGrid를 위한 Context 생성
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const DataGridContext = createContext<Omit<DataGridProps<any>, 'rows' | 'rowsPromise'> | null>(null);
+
+// 2. 하위 컴포넌트에서 쉽게 사용할 수 있는 Custom Hook 제공
+export function useDataGridContext<T>() {
+  const context = useContext(DataGridContext);
+  if (!context) {
+    throw new Error("useDataGridContext must be used within a DataGrid");
+  }
+  return context as Omit<DataGridProps<T>, 'rows' | 'rowsPromise'>;
+}
 
 type DataGridTableProps<T> = {
   columns: DataGridColumn<T>[];
@@ -159,32 +172,44 @@ export function DataGrid<T>(props: DataGridProps<T>) {
   const emptyMessage = props.emptyMessage ?? "데이터가 없습니다.";
   const skeletonRows = props.skeletonRows ?? 6;
 
+  // 3. Provider에 전달할 Context Value 메모이제이션
+  const contextValue = useMemo(() => ({
+    columns: props.columns,
+    rowKey: props.rowKey,
+    emptyMessage,
+    skeletonRows
+  }), [props.columns, props.rowKey, emptyMessage, skeletonRows]);
+
   if ("rows" in props && props.rows) {
     return (
-      <DataGridTable
-        columns={props.columns}
-        rows={props.rows}
-        rowKey={props.rowKey}
-        emptyMessage={emptyMessage}
-      />
+      <DataGridContext.Provider value={contextValue}>
+        <DataGridTable
+          columns={props.columns}
+          rows={props.rows}
+          rowKey={props.rowKey}
+          emptyMessage={emptyMessage}
+        />
+      </DataGridContext.Provider>
     );
   }
 
   return (
-    <Suspense
-      fallback={
-        <DataGridSkeleton
-          columnCount={props.columns.length}
-          rowCount={skeletonRows}
+    <DataGridContext.Provider value={contextValue}>
+      <Suspense
+        fallback={
+          <DataGridSkeleton
+            columnCount={props.columns.length}
+            rowCount={skeletonRows}
+          />
+        }
+      >
+        <DataGridAsyncInner
+          columns={props.columns}
+          rowKey={props.rowKey}
+          rowsPromise={props.rowsPromise}
+          emptyMessage={emptyMessage}
         />
-      }
-    >
-      <DataGridAsyncInner
-        columns={props.columns}
-        rowKey={props.rowKey}
-        rowsPromise={props.rowsPromise}
-        emptyMessage={emptyMessage}
-      />
-    </Suspense>
+      </Suspense>
+    </DataGridContext.Provider>
   );
 }
