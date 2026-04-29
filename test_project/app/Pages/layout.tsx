@@ -14,6 +14,7 @@ const pageLinks = [
   "P00011",
   "P00012",
   "P00013",
+  "P00018",
 ];
 
 export default function PagesLayout({ children }: { children: React.ReactNode }) {

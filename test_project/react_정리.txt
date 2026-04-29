@@ -166,3 +166,5 @@ useLayoutEffect와 useEffect의 차이
 5. useEffect => 보통은 페인트 이후 실행됨
 
 
+기존 서버 액션 = 캐싱, 로딩/에러 상태, 재요청 등을 전부 직접 관리해야함
+TanStack Query = "가져온 데이터를 어떻게 관리하냐 (캐싱, 로딩, 에러, 재요청)"

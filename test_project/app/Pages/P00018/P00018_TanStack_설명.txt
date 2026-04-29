@@ -1,0 +1,614 @@
+================================================================================
+  P00018 - TanStack Query + 서버 액션 + error.tsx 완전 정리
+================================================================================
+
+  구성 파일
+  ─────────────────────────────────────────────────────────────────────────────
+  app/Pages/P00018/
+  ├── actions.ts       서버에서 실행되는 함수(서버 액션) 모음
+  ├── page.tsx         클라이언트 UI + TanStack Query 훅 사용
+  └── error.tsx        에러 발생 시 자동으로 렌더링되는 Next.js Error Boundary
+  └── P00018_TanStack_설명.txt  (이 파일)
+
+
+================================================================================
+  1. TanStack Query 란?
+================================================================================
+
+  TanStack Query (구 React Query) 는 서버로부터 데이터를 가져오고(fetch),
+  캐싱하고, 동기화하는 작업을 자동으로 관리해주는 라이브러리입니다.
+
+  기존에 직접 관리해야 했던 것들을 TanStack Query 가 자동으로 처리해줍니다.
+
+  ┌──────────────────────────────────────────────────────┐
+  │  기존 방식 (useState + useEffect)                     │
+  │                                                      │
+  │  const [data, setData] = useState([]);               │
+  │  const [isLoading, setIsLoading] = useState(false);  │
+  │  const [error, setError] = useState(null);           │
+  │                                                      │
+  │  useEffect(() => {                                   │
+  │    setIsLoading(true);                               │
+  │    fetchData()                                       │
+  │      .then(setData)                                  │
+  │      .catch(setError)                                │
+  │      .finally(() => setIsLoading(false));            │
+  │  }, []);                                             │
+  └──────────────────────────────────────────────────────┘
+
+  ┌──────────────────────────────────────────────────────┐
+  │  TanStack Query 방식 (useQuery)                       │
+  │                                                      │
+  │  const { data, isLoading, isError, error } =         │
+  │    useQuery({                                        │
+  │      queryKey: ["employees"],                        │
+  │      queryFn: () => fetchData(),                     │
+  │    });                                               │
+  └──────────────────────────────────────────────────────┘
+
+  TanStack Query 가 자동으로 처리해주는 것들:
+    - 로딩 상태 (isLoading, isFetching)
+    - 에러 상태 (isError, error)
+    - 캐싱 (같은 queryKey 면 중복 요청 방지)
+    - 백그라운드 재요청 (탭 전환 후 복귀 시 최신 데이터 자동 갱신)
+    - 재시도 (실패 시 자동 재시도, retry 옵션으로 횟수 설정 가능)
+    - 캐시 무효화 (mutation 성공 후 관련 쿼리 자동 재조회)
+
+
+================================================================================
+  2. QueryClient 와 QueryClientProvider - page.tsx
+================================================================================
+
+  코드 위치: page.tsx - Providers 함수 (1~37번 줄)
+
+  ────────────────────────────────────────────────────────────────────────────
+  코드:
+  ────────────────────────────────────────────────────────────────────────────
+
+    function Providers({ children }: { children: React.ReactNode }) {
+      const [queryClient] = useState(
+        () =>
+          new QueryClient({
+            defaultOptions: {
+              queries: {
+                staleTime: 1000 * 30,
+                throwOnError: true,
+              },
+            },
+          }),
+      );
+      return (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      );
+    }
+
+  ────────────────────────────────────────────────────────────────────────────
+  설명:
+  ────────────────────────────────────────────────────────────────────────────
+
+  [1] QueryClient
+      TanStack Query 의 핵심 인스턴스입니다.
+      캐시 저장소 역할을 하며, 모든 쿼리/뮤테이션의 상태를 여기서 관리합니다.
+
+  [2] new QueryClient({ defaultOptions: { queries: { ... } } })
+      모든 useQuery 에 공통으로 적용할 기본 옵션을 설정합니다.
+      개별 useQuery 에서 덮어쓰지 않는 한 이 설정이 전부 적용됩니다.
+
+  [3] staleTime: 1000 * 30
+      30,000ms = 30초를 의미합니다.
+      데이터를 가져온 후 30초 동안은 해당 데이터를 "신선한(fresh)" 상태로 봅니다.
+      이 시간 안에는 동일한 queryKey 로 재요청이 와도 서버에 요청하지 않고
+      캐시된 데이터를 그대로 반환합니다.
+      30초가 지나면 "낡은(stale)" 상태가 되어 다음 요청 시 서버에 재요청합니다.
+
+      예시:
+        - 직원 목록을 조회하고 15초 후 다시 같은 페이지에 접근 → 캐시 반환
+        - 직원 목록을 조회하고 35초 후 다시 같은 페이지에 접근 → 서버 재요청
+
+  [4] throwOnError: true  ★★★ 핵심
+      기본값은 false 입니다. true 로 설정하면 쿼리에서 에러가 발생했을 때
+      TanStack Query 가 에러를 React 렌더링 과정으로 re-throw 합니다.
+      그러면 가장 가까운 React Error Boundary (= error.tsx) 가 에러를 잡아서
+      에러 화면을 표시합니다.
+      이 설정을 defaultOptions 에 넣으면 모든 useQuery 에 자동 적용됩니다.
+
+      throwOnError: true  → 에러 발생 시 error.tsx 가 렌더링됨
+      throwOnError: false → 에러 발생 시 isError, error 로 컴포넌트 내에서 처리
+
+  [5] useState(() => new QueryClient(...))
+      QueryClient 를 컴포넌트 외부에 선언하면 Next.js 의 서버/클라이언트 경계에서
+      인스턴스가 공유되어 버그가 생길 수 있습니다.
+      useState 의 초기화 함수(lazy initializer) 로 생성하면 컴포넌트가 마운트될 때
+      딱 한 번만 생성되고, 이후 리렌더링 시에는 기존 인스턴스를 재사용합니다.
+
+  [6] QueryClientProvider
+      생성한 QueryClient 를 React Context 를 통해 하위 모든 컴포넌트에 전달합니다.
+      이 Provider 안에 있는 컴포넌트에서만 useQuery, useMutation, useQueryClient
+      훅을 사용할 수 있습니다.
+
+  [7] Page → Providers → P00018Inner 구조
+      Page 컴포넌트가 Providers 로 감싸고, 실제 로직은 P00018Inner 에 있습니다.
+      이렇게 분리하는 이유는 useQuery 등의 훅이 반드시 QueryClientProvider
+      내부에서 호출되어야 하기 때문입니다.
+
+
+================================================================================
+  3. useQuery - 데이터 조회 훅 - page.tsx
+================================================================================
+
+  코드 위치: page.tsx - P00018Inner 함수 (56~67번 줄)
+
+  ────────────────────────────────────────────────────────────────────────────
+  코드:
+  ────────────────────────────────────────────────────────────────────────────
+
+    const {
+      data: employees,
+      isLoading,
+      isError,
+      error,
+      refetch,
+    } = useQuery({
+      queryKey: ["p00018-employees", searchKeyword],
+      queryFn: () => getEmployeesAction(searchKeyword),
+    });
+
+  ────────────────────────────────────────────────────────────────────────────
+  설명:
+  ────────────────────────────────────────────────────────────────────────────
+
+  [1] useQuery
+      서버에서 데이터를 가져오는 훅입니다.
+      비동기 함수(queryFn)를 실행하고, 그 결과를 캐싱합니다.
+
+  [2] queryKey: ["p00018-employees", searchKeyword]
+      이 쿼리를 식별하는 고유 키입니다. 배열 형태로 작성합니다.
+      TanStack Query 는 이 키를 기반으로 캐시를 저장하고 조회합니다.
+
+      중요한 규칙:
+        - queryKey 가 변경되면 새로운 쿼리로 간주하고 서버에 재요청합니다.
+        - searchKeyword 가 "" → "홍길동" 으로 바뀌면
+          ["p00018-employees", ""] 와 ["p00018-employees", "홍길동"] 은
+          다른 캐시로 관리됩니다.
+        - 검색어가 다시 "" 로 돌아오면 기존 캐시를 재사용합니다.
+
+      관례:
+        배열의 첫 번째 원소는 도메인/기능 이름을 문자열로 씁니다.
+        두 번째 원소부터는 필터나 파라미터 값을 넣습니다.
+
+        ["employees"]                  → 전체 직원 목록
+        ["employees", "홍길동"]        → 홍길동 검색 결과
+        ["employees", { page: 2 }]     → 2페이지 직원 목록
+
+  [3] queryFn: () => getEmployeesAction(searchKeyword)
+      실제로 데이터를 가져오는 비동기 함수입니다.
+      Promise 를 반환하는 함수라면 무엇이든 넣을 수 있습니다.
+
+      이 프로젝트에서는 서버 액션(getEmployeesAction)을 직접 호출합니다.
+      서버 액션은 "use server" 지시어가 붙어있어 서버에서만 실행됩니다.
+      클라이언트에서 호출하면 Next.js 가 자동으로 네트워크 요청으로 변환합니다.
+
+      기존 API fetch 방식과 비교:
+        기존: queryFn: () => fetch("/api/employees?keyword=" + searchKeyword).then(r => r.json())
+        서버 액션: queryFn: () => getEmployeesAction(searchKeyword)
+
+      서버 액션 방식이 더 간결하고, API Route 파일을 별도로 만들 필요가 없습니다.
+
+  [4] 반환값
+
+      data (employees 로 이름 변경)
+        queryFn 이 반환한 데이터입니다.
+        처음 로딩 중일 때는 undefined 입니다.
+        따라서 (employees ?? []) 처럼 기본값을 처리해야 합니다.
+
+      isLoading
+        true: 최초 데이터를 가져오는 중 (캐시 없음 + 요청 중)
+        false: 로딩 완료 (성공이든 실패든)
+
+        isLoading vs isFetching 차이:
+          isLoading  - 캐시가 없는 상태에서 처음 요청 중일 때만 true
+          isFetching - 캐시가 있어도 백그라운드에서 재요청 중일 때도 true
+
+      isError
+        true: queryFn 에서 에러가 발생했을 때
+        단, throwOnError: true 가 설정되어 있으면 isError 가 true 가 되기 전에
+        에러가 error.tsx 로 전파됩니다.
+
+      error
+        발생한 에러 객체입니다. isError 가 true 일 때만 유효합니다.
+        error.message 로 에러 메시지를 가져올 수 있습니다.
+
+      refetch
+        수동으로 다시 조회를 트리거하는 함수입니다.
+        "새로고침" 버튼 클릭 시 refetch() 를 호출합니다.
+
+  [5] queryKey 변경 시 자동 재조회
+      searchKeyword state 가 바뀌면 queryKey 가 바뀌고,
+      TanStack Query 가 자동으로 새 쿼리를 실행합니다.
+      따라서 useEffect 없이도 검색어가 바뀔 때 자동으로 재조회됩니다.
+
+      state 흐름:
+        keyword (입력값) → 조회 버튼 클릭 → searchKeyword 변경
+        → queryKey 변경 → useQuery 자동 재실행
+        → 서버 액션 호출 → data 업데이트 → 화면 리렌더링
+
+
+================================================================================
+  4. useQueryClient - 캐시 직접 제어 훅 - page.tsx
+================================================================================
+
+  코드 위치: page.tsx - P00018Inner 함수 (54번 줄)
+
+  ────────────────────────────────────────────────────────────────────────────
+  코드:
+  ────────────────────────────────────────────────────────────────────────────
+
+    const queryClient = useQueryClient();
+
+  ────────────────────────────────────────────────────────────────────────────
+  설명:
+  ────────────────────────────────────────────────────────────────────────────
+
+  useQueryClient 는 현재 컨텍스트의 QueryClient 인스턴스를 가져오는 훅입니다.
+  캐시를 직접 조작할 때 사용합니다.
+
+  주요 메서드:
+
+    queryClient.invalidateQueries({ queryKey: ["p00018-employees"] })
+      해당 키로 캐시된 데이터를 "낡은(stale)" 상태로 표시합니다.
+      그러면 useQuery 가 백그라운드에서 자동으로 서버에 재요청합니다.
+      이 프로젝트에서는 직원 상태 토글 성공 후 목록을 자동 갱신하기 위해 사용합니다.
+
+    queryClient.setQueryData(key, data)
+      서버 요청 없이 캐시를 직접 수정합니다.
+      낙관적 업데이트(Optimistic Update)에서 주로 사용합니다.
+
+    queryClient.getQueryData(key)
+      현재 캐시에 저장된 데이터를 읽어옵니다.
+
+
+================================================================================
+  5. useMutation - 데이터 변경 훅 - page.tsx
+================================================================================
+
+  코드 위치: page.tsx - P00018Inner 함수 (70~85번 줄)
+
+  ────────────────────────────────────────────────────────────────────────────
+  코드:
+  ────────────────────────────────────────────────────────────────────────────
+
+    const toggleMutation = useMutation({
+      mutationFn: ({
+        employeeId,
+        isActive,
+      }: {
+        employeeId: number;
+        isActive: "Y" | "N";
+      }) => toggleEmployeeStatusAction(employeeId, isActive),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["p00018-employees"] });
+      },
+      onError: (err) => {
+        alert(`상태 변경 실패: ${err.message}`);
+      },
+    });
+
+  ────────────────────────────────────────────────────────────────────────────
+  설명:
+  ────────────────────────────────────────────────────────────────────────────
+
+  [1] useMutation vs useQuery 차이
+
+      useQuery   - 데이터를 읽는 용도 (GET 개념)
+                   컴포넌트 마운트 시 자동 실행됩니다.
+                   캐싱됩니다.
+
+      useMutation - 데이터를 변경하는 용도 (POST, PUT, DELETE 개념)
+                    수동으로 실행해야 합니다 (mutate() 호출).
+                    캐싱되지 않습니다.
+
+  [2] mutationFn
+      실제로 서버에 데이터를 변경하는 함수입니다.
+      toggleMutation.mutate({ employeeId, isActive }) 를 호출할 때
+      여기에 정의한 함수가 실행됩니다.
+
+  [3] onSuccess
+      mutationFn 이 성공적으로 완료된 후 실행되는 콜백입니다.
+      여기서 invalidateQueries 를 호출하면:
+        1. "p00018-employees" 캐시가 낡은 상태로 표시됨
+        2. useQuery 가 자동으로 서버에 재요청
+        3. 최신 직원 목록이 화면에 반영됨
+
+      이것이 TanStack Query 의 핵심 패턴입니다.
+      "저장 후 자동 재조회" 를 invalidateQueries 한 줄로 처리합니다.
+
+  [4] onError
+      mutationFn 이 실패했을 때 실행되는 콜백입니다.
+      useMutation 에서 발생한 에러는 기본적으로 error.tsx 로 전파되지 않습니다.
+      (throwOnError: true 는 queries 에만 적용됨)
+      따라서 onError 콜백에서 직접 처리해야 합니다.
+
+  [5] toggleMutation.mutate({ employeeId, isActive })
+      UI 에서 버튼을 클릭할 때 이 함수를 호출해 mutation 을 실행합니다.
+
+  [6] toggleMutation.isPending
+      true: mutation 이 실행 중 (서버 응답 대기)
+      false: 실행 완료 또는 미실행
+      이를 이용해 버튼을 비활성화하거나 로딩 텍스트를 보여줍니다.
+
+  [7] 전체 실행 흐름
+
+      버튼 클릭
+        → toggleMutation.mutate({ employeeId: 1, isActive: "Y" })
+        → mutationFn 실행: toggleEmployeeStatusAction(1, "Y")
+        → 서버 액션이 DB UPDATE 실행 (Y → N)
+        → 성공 시 onSuccess 실행
+        → invalidateQueries(["p00018-employees"])
+        → useQuery 가 서버에 재요청 (직원 목록 최신화)
+        → 화면 자동 갱신
+
+
+================================================================================
+  6. 서버 액션 - actions.ts
+================================================================================
+
+  코드 위치: actions.ts 전체
+
+  ────────────────────────────────────────────────────────────────────────────
+  설명:
+  ────────────────────────────────────────────────────────────────────────────
+
+  [1] "use server" 지시어
+      파일 최상단에 선언합니다.
+      이 파일의 모든 함수는 서버에서만 실행됩니다.
+      클라이언트 컴포넌트에서 import 하면, Next.js 가 자동으로 네트워크
+      요청으로 변환합니다. (API Route 없이도 클라이언트-서버 통신 가능)
+
+  [2] getEmployeesAction(keyword: string): Promise<Employee[]>
+      MST_EMPLOYEE 테이블에서 직원 목록을 조회합니다.
+      keyword 가 있으면 FULL_NAME 에 LIKE 조건을 추가합니다.
+      keyword 가 없으면 전체 조회합니다.
+
+      오라클 바인드 변수 (:keyword) 를 사용하여 SQL Injection 을 방지합니다.
+
+      Oracle 연결은 getOracleConnection() 을 통해 Connection Pool 에서 가져옵니다.
+      try/finally 로 항상 connection.close() 를 보장합니다.
+
+      에러 처리:
+        Oracle 연결 실패, SQL 오류 등이 발생하면 에러가 자연스럽게 throw 됩니다.
+        TanStack Query 가 이 에러를 캐치하고, throwOnError: true 설정에 의해
+        error.tsx 로 전파됩니다.
+
+  [3] toggleEmployeeStatusAction(employeeId, currentStatus): Promise<void>
+      직원의 IS_ACTIVE 컬럼을 토글합니다. (Y → N, N → Y)
+      UPDATE 후 반드시 connection.commit() 을 호출해야 DB에 반영됩니다.
+      (Oracle 은 자동 커밋이 아닙니다)
+
+  [4] getFatalDataAction(): Promise<never>
+      error.tsx 전파 데모를 위한 함수입니다.
+      항상 에러를 throw 합니다.
+      실제 프로젝트에서는 이런 함수가 없고, DB 연결 실패 등의 자연스러운
+      에러가 이와 동일하게 동작합니다.
+
+      Promise<never> 타입은 "이 함수는 절대로 정상적으로 값을 반환하지 않는다"
+      는 의미입니다. 항상 throw 하는 함수에 사용합니다.
+
+
+================================================================================
+  7. FatalQueryDemo 컴포넌트 - page.tsx
+================================================================================
+
+  코드 위치: page.tsx - FatalQueryDemo 함수 (317~330번 줄)
+
+  ────────────────────────────────────────────────────────────────────────────
+  코드:
+  ────────────────────────────────────────────────────────────────────────────
+
+    function FatalQueryDemo() {
+      useQuery({
+        queryKey: ["p00018-fatal-demo"],
+        queryFn: () => getFatalDataAction(),
+        retry: false,
+      });
+
+      return (
+        <p className="mt-3 text-sm text-rose-700 animate-pulse">
+          서버에서 데이터를 가져오는 중... (곧 에러가 발생합니다)
+        </p>
+      );
+    }
+
+  ────────────────────────────────────────────────────────────────────────────
+  설명:
+  ────────────────────────────────────────────────────────────────────────────
+
+  [1] retry: false
+      기본값은 retry: 3 으로 실패 시 3번 재시도합니다.
+      retry: false 로 설정하면 재시도 없이 즉시 에러 상태로 전환됩니다.
+      데모 목적으로 바로 에러가 보이도록 false 로 설정했습니다.
+
+  [2] throwOnError 별도 설정 없음
+      QueryClient defaultOptions 에 throwOnError: true 가 설정되어 있으므로
+      이 useQuery 에는 별도로 throwOnError 를 쓰지 않아도 됩니다.
+      전역 설정이 자동으로 적용됩니다.
+
+  [3] 렌더링 흐름
+
+      "치명적 에러 발생" 버튼 클릭
+        → showFatalDemo = true
+        → <FatalQueryDemo /> 컴포넌트 렌더링
+        → useQuery 실행: getFatalDataAction() 호출
+        → 1번째 렌더: status = "pending" → 로딩 텍스트 표시
+        → 서버 액션이 0.6초 후 에러 throw
+        → TanStack Query 가 에러 캐치
+        → retry: false → 재시도 없음
+        → throwOnError: true → 다음 렌더에서 에러 re-throw
+        → 2번째 렌더: FatalQueryDemo 컴포넌트가 에러 throw
+        → React Error Boundary (error.tsx) 가 에러 캐치
+        → error.tsx 화면 렌더링
+
+
+================================================================================
+  8. error.tsx - Next.js Error Boundary
+================================================================================
+
+  코드 위치: error.tsx 전체
+
+  ────────────────────────────────────────────────────────────────────────────
+  코드 핵심 부분:
+  ────────────────────────────────────────────────────────────────────────────
+
+    "use client";
+
+    type Props = {
+      error: Error & { digest?: string };
+      reset: () => void;
+    };
+
+    export default function ErrorPage({ error, reset }: Props) {
+      useEffect(() => {
+        console.error("[P00018 Error Boundary]", error);
+      }, [error]);
+
+      return ( ... );
+    }
+
+  ────────────────────────────────────────────────────────────────────────────
+  설명:
+  ────────────────────────────────────────────────────────────────────────────
+
+  [1] "use client" 필수
+      error.tsx 는 반드시 클라이언트 컴포넌트여야 합니다.
+      에러가 클라이언트 렌더링 도중 발생하기 때문입니다.
+
+  [2] 자동 렌더링 조건
+      같은 폴더(app/Pages/P00018/) 의 page.tsx 에서 처리되지 않은 에러가 발생하면
+      Next.js App Router 가 자동으로 error.tsx 를 렌더링합니다.
+      별도로 import 하거나 등록할 필요가 없습니다.
+
+  [3] error props
+      발생한 에러 객체입니다.
+        error.message : 에러 메시지 문자열
+        error.digest  : 서버에서 발생한 에러에 Next.js 가 자동으로 부여하는
+                        해시값입니다. 서버 로그에서 해당 에러를 추적하는 용도입니다.
+                        클라이언트에서 발생한 에러는 digest 가 없습니다.
+
+  [4] reset props
+      Next.js 가 제공하는 "복구 시도" 함수입니다.
+      호출하면 error.tsx 를 언마운트하고 page.tsx 를 다시 렌더링하려 시도합니다.
+      React 의 Error Boundary reset 메커니즘을 활용합니다.
+      reset() 후 같은 에러가 발생하면 다시 error.tsx 가 렌더링됩니다.
+
+  [5] useEffect(() => { console.error(error) }, [error])
+      에러가 발생할 때마다 콘솔에 기록합니다.
+      실무에서는 여기에 Sentry.captureException(error) 같은 코드를 넣어
+      에러 추적 서비스(Sentry, Datadog, LogRocket 등)로 에러를 전송합니다.
+
+  [6] error.tsx 가 잡는 에러 vs 못 잡는 에러
+
+      잡는 경우:
+        - throwOnError: true 인 useQuery 에서 서버 액션이 에러를 throw 한 경우
+        - 컴포넌트 렌더링 중 동기적으로 throw 된 에러
+        - 서버 컴포넌트에서 처리되지 않은 에러
+
+      못 잡는 경우:
+        - throwOnError: false (기본값) 인 useQuery → isError 로만 표시됨
+        - useMutation 의 에러 → onError 콜백으로만 처리됨
+        - 이벤트 핸들러 내부의 에러 (onClick 등)
+        - setTimeout, setInterval 내부의 에러
+
+  [7] "다시 시도" vs "페이지 새로 열기" 차이
+
+      다시 시도 (reset() 호출):
+        React 수준에서 Error Boundary 를 리셋하고 page.tsx 재렌더링 시도
+        SPA 방식이므로 빠릅니다.
+        에러 원인이 해소되지 않으면 다시 error.tsx 가 나타납니다.
+        state 는 모두 초기화됩니다 (showFatalDemo 가 false 로 돌아감).
+
+      페이지 새로 열기 (URL 접속):
+        브라우저가 완전히 새로운 HTTP 요청을 보냅니다.
+        모든 JS 메모리가 초기화됩니다.
+
+
+================================================================================
+  9. throwOnError 설정 방법 3가지
+================================================================================
+
+  [방법 1] 전역 설정 (이 프로젝트의 방식)
+    모든 useQuery 에 자동 적용됩니다.
+
+    new QueryClient({
+      defaultOptions: {
+        queries: {
+          throwOnError: true,
+        },
+      },
+    });
+
+  [방법 2] 개별 쿼리에 설정
+    특정 쿼리에만 적용됩니다.
+
+    useQuery({
+      queryKey: ["employees"],
+      queryFn: getEmployeesAction,
+      throwOnError: true,
+    });
+
+  [방법 3] 함수로 조건부 설정 ★ 실무 권장
+    에러 종류에 따라 error.tsx 전파 여부를 동적으로 결정합니다.
+
+    useQuery({
+      queryKey: ["employees"],
+      queryFn: getEmployeesAction,
+      throwOnError: (error) => {
+        // Oracle 연결 에러, 네트워크 에러 등 치명적 에러 → error.tsx 로 전파
+        if (error.message.includes("ORA-") || error.message.includes("connect")) {
+          return true;
+        }
+        // 데이터 없음, 권한 없음 등 → isError 로 인라인 처리
+        return false;
+      },
+    });
+
+
+================================================================================
+  10. TanStack Query 쿼리 상태 전환 다이어그램
+================================================================================
+
+  컴포넌트 마운트
+       │
+       ▼
+  [pending/isLoading]  ← 캐시 없음 + 서버 요청 중
+       │
+       ├── 성공 ──▶ [success]  data 에 결과 저장
+       │                │
+       │                ├── staleTime 경과 ──▶ [stale]  다음 포커스/마운트 시 재요청
+       │                └── invalidateQueries ──▶ 즉시 재요청
+       │
+       └── 실패 ──▶ [error]   에러 저장
+                      │
+                      ├── throwOnError: false → isError: true → 컴포넌트 내 처리
+                      └── throwOnError: true  → 에러 re-throw → error.tsx 렌더링
+
+
+================================================================================
+  11. 이 프로젝트에서 사용한 TanStack Query 패키지
+================================================================================
+
+  @tanstack/react-query  v5.x
+    - QueryClient, QueryClientProvider
+    - useQuery, useMutation, useQueryClient
+
+  사용된 import (page.tsx):
+    import {
+      QueryClient,          // 캐시 관리 인스턴스
+      QueryClientProvider,  // 하위 컴포넌트에 QueryClient 제공
+      useQuery,             // 데이터 조회 훅
+      useMutation,          // 데이터 변경 훅
+      useQueryClient,       // QueryClient 인스턴스 접근 훅
+    } from "@tanstack/react-query";
+
+
+================================================================================
+  끝
+================================================================================
