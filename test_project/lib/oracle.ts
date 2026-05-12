@@ -1,12 +1,6 @@
 import oracledb from "oracledb";
 
-type OracleEnv = {
-  user: string;
-  password: string;
-  connectString: string;
-};
-
-function getOracleEnv(): OracleEnv {
+function getOracleEnv() {
   const user = process.env.ORACLE_USER;
   const password = process.env.ORACLE_PASSWORD;
   const connectString = process.env.ORACLE_CONNECT_STRING;
